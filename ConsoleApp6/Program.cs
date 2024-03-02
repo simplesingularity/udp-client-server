@@ -1,8 +1,10 @@
 ﻿using System;
 using System.IO;
 using System.Net.Sockets;
+using System.Security.AccessControl;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Schema;
 
 namespace ConsoleApp6
 {
@@ -41,6 +43,7 @@ namespace ConsoleApp6
             MemoryStream ms = new MemoryStream();
             test_frame.Serialize(ms);
             byte[] raw_test = ms.ToArray();
+            ms.Close();
             for (int i = 0; i < raw_test.Length; i++)
             {
                 Console.Write("\\x" + raw_test[i].ToString("x2"));
@@ -127,14 +130,8 @@ namespace ConsoleApp6
                 size = data.Length;
             }
 
-            for (int i = 0; i < sizeof(int); i++)
-            {
-                stream.WriteByte((byte)(type >> (i * 8)));
-            }
-            for (int i = 0; i < sizeof(int); i++)
-            {
-                stream.WriteByte((byte)(size >> (i * 8)));
-            }
+            Util.SerializeInt(stream, type);
+            Util.SerializeInt(stream, size);
 
             if (size > 0)
             {
@@ -146,16 +143,8 @@ namespace ConsoleApp6
 
         public static Frame Deserialize(Stream stream)
         {
-            int _type = 0;
-            for (int i = 0; i < sizeof(int); i++)
-            {
-                _type |= stream.ReadByte() << (8 * i);
-            }
-            int _size = 0;
-            for (int i = 0; i < sizeof(int); i++)
-            {
-                _size |= stream.ReadByte() << (8 * i);
-            }
+            int _type = Util.DeserializeInt(stream);
+            int _size = Util.DeserializeInt(stream);
 
             Frame frame = new Frame();
             frame.type = _type;
@@ -172,6 +161,61 @@ namespace ConsoleApp6
             }
 
             return frame;
+
+        }
+    }
+
+    static class Util
+    {
+        private static Encoding encoding = new UTF8Encoding(false, false);
+        public static byte[] SerializeInt(int value)
+        {
+            byte[] raw = new byte[sizeof(int)];
+            for (int j = 0; j < raw.Length; j++)
+                raw[j] = (byte)(value >> (8 * j));
+            return raw;
+        }
+
+        public static int DeserializeInt(byte[] data)
+        {
+            int value = 0;
+            for (int j = 0; j < data.Length; j++)
+                value |= data[j] << (8 * j);
+            return value;
+        }
+
+        public static void SerializeInt(Stream stream, int value)
+        {
+            for (int j = 0; j < sizeof(int); j++)
+            {
+                stream.WriteByte((byte)(value >> (8 * j)));
+            }
+        }
+
+        public static int DeserializeInt(Stream stream)
+        {
+            int value = 0;
+            for (int j = 0; j < sizeof(int); j++)
+            {
+                value |= stream.ReadByte() << (8 * j);
+            }
+            return value;
+        }
+
+        public static void SerializeString(Stream stream, string value )
+        {
+            byte[] raw = encoding.GetBytes(value);
+            stream.Write(raw, 0, raw.Length);
+        }
+        
+        public static string DeserializeString(Stream stream, int length )
+        {
+            byte[] raw = new byte[length];
+            int r;
+            r = stream.Read(raw, 0, raw.Length );
+            if (r < length)
+                throw new Exception("Wrong string length, or failed to read string");
+            return encoding.GetString(raw);
 
         }
     }
